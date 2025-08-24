@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baza Rodowodowa Koni</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex: 1;
+            min-width: 500px;
+            overflow-x: auto;
+        }
+        table {
+            width: auto;
+            min-width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            white-space: nowrap;
+        }
+        th {
+            background-color: #f2f2f2;
+            position: sticky;
+            top: 0;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .edit-form {
+            display: none;
+            margin-top: 10px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+        .pedigree {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 5px;
+            background-color: white;
+        }
+        .pedigree .parent {
+            margin-left: 20px;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+        .success {
+            color: green;
+            margin-top: 10px;
+        }
+        button {
+            padding: 5px 8px;
+            margin: 2px;
+            cursor: pointer;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .edit-btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+        }
+        .delete-btn {
+            background-color: #f44336;
+            color: white;
+            border: none;
+        }
+        .save-btn {
+            background-color: #2196F3;
+            color: white;
+            border: none;
+        }
+        .table-container {
+            overflow-x: auto;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            .section {
+                min-width: 100%;
+            }
+            th, td {
+                padding: 4px;
+                font-size: 14px;
+            }
+            button {
+                padding: 3px 6px;
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Baza Rodowodowa Koni</h1>
+    
+    <div class="container">
+        <!-- Sekcja krajów -->
+        <div class="section">
+            <h2>Kraje</h2>
+            <div id="countriesList"></div>
+        </div>
+
+        <!-- Sekcja hodowców -->
+        <div class="section">
+            <h2>Hodowcy</h2>
+            <div id="breedersList"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Sekcja koni -->
+        <div class="section">
+            <h2>Konie</h2>
+            <select id="horseGenderFilter" onchange="fetchHorses()">
+                <option value="">Wszystkie płci</option>
+                <option value="mare">Klacz</option>
+                <option value="stallion">Ogier</option>
+                <option value="gelding">Wałach</option>
+            </select>
+            <div id="horsesList" class="table-container"></div>
+        </div>
+
+        <!-- Sekcja rodowodu -->
+        <div class="section">
+            <h2>Rodowód</h2>
+            <input type="number" id="pedigreeHorseId" placeholder="ID konia">
+            <select id="pedigreeDepth">
+                <option value="1">1 pokolenie</option>
+                <option value="2" selected>2 pokolenia</option>
+                <option value="3">3 pokolenia</option>
+                <option value="4">4 pokolenia</option>
+            </select>
+            <button onclick="fetchPedigree()">Pobierz rodowód</button>
+            <div id="pedigreeDisplay"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000';
+
+        // Funkcje pomocnicze
+        function showMessage(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = type;
+            setTimeout(() => element.textContent = '', 5000);
+        }
+
+        function translateGender(gender) {
+            return {
+                'mare': 'Klacz',
+                'stallion': 'Ogier',
+                'gelding': 'Wałach'
+            }[gender] || gender;
+        }
+
+        // Kraje
+        async function fetchCountries() {
+            try {
+                const response = await fetch(`${API_URL}/countries`);
+                const countries = await response.json();
+                
+                let html = `
+                    <div class="table-container">
+                        <table>
+                            <tr>
+                                <th>Kod</th>
+                                <th>Nazwa</th>
+                                <th>Akcje</th>
+                            </tr>
+                            ${countries.map(country => `
+                                <tr>
+                                    <td>${country.code}</td>
+                                    <td>${country.name}</td>
+                                    <td>
+                                        <button class="edit-btn" onclick="showEditCountryForm('${country.code}')">Edytuj</button>
+                                        <button class="delete-btn" onclick="deleteCountry('${country.code}')">Usuń</button>
+                                    </td>
+                                </tr>
+                                <tr id="editCountry-${country.code}" class="edit-form">
+                                    <td colspan="3">
+                                        <input type="text" id="editCountryName-${country.code}" value="${country.name}">
+                                        <button class="save-btn" onclick="updateCountry('${country.code}')">Zapisz</button>
+                                        <button onclick="hideEditForm('editCountry-${country.code}')">Anuluj</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </table>
+                    </div>
+                    <div>
+                        <h3>Dodaj nowy kraj</h3>
+                        <input type="text" id="newCountryCode" placeholder="Kod (2 znaki)" maxlength="2">
+                        <input type="text" id="newCountryName" placeholder="Nazwa kraju">
+                        <button class="save-btn" onclick="addCountry()">Dodaj kraj</button>
+                    </div>
+                `;
+                
+                document.getElementById('countriesList').innerHTML = html;
+            } catch (error) {
+                console.error('Błąd pobierania krajów:', error);
+            }
+        }
+
+        function showEditCountryForm(code) {
+            document.querySelectorAll('.edit-form').forEach(f => f.style.display = 'none');
+            document.getElementById(`editCountry-${code}`).style.display = 'table-row';
+        }
+
+        async function updateCountry(code) {
+            const newName = document.getElementById(`editCountryName-${code}`).value;
+            
+            try {
+                const response = await fetch(`${API_URL}/countries/${code}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName })
+                });
+                
+                if (response.ok) {
+                    fetchCountries();
+                } else {
+                    const error = await response.json();
+                    alert(`Błąd: ${error.error}`);
+                }
+            } catch (error) {
+                console.error('Błąd aktualizacji kraju:', error);
+            }
+        }
+
+        async function addCountry() {
+            const code = document.getElementById('newCountryCode').value.toUpperCase();
+            const name = document.getElementById('newCountryName').value;
+            
+            try {
+                const response = await fetch(`${API_URL}/countries`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code, name })
+                });
+                
+                if (response.ok) {
+                    document.getElementById('newCountryCode').value = '';
+                    document.getElementById('newCountryName').value = '';
+                    fetchCountries();
+                } else {
+                    const error = await response.json();
+                    alert(`Błąd: ${error.error}`);
+                }
+            } catch (error) {
+                console.error('Błąd dodawania kraju:', error);
+            }
+        }
+
+        async function deleteCountry(code) {
+            if (confirm(`Czy na pewno chcesz usunąć kraj ${code}?`)) {
+                try {
+                    const response = await fetch(`${API_URL}/countries/${code}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (!response.ok) {
+                        const error = await response.json();
+                        alert(`Błąd: ${error.error}`);
+                    }
+                    fetchCountries();
+                } catch (error) {
+                    console.error('Błąd usuwania kraju:', error);
+                }
+            }
+        }
+
+        // Hodowcy
+        async function fetchBreeders() {
+            try {
+                const [breeders, countries] = await Promise.all([
+                    fetch(`${API_URL}/breeders`).then(r => r.json()),
+                    fetch(`${API_URL}/countries`).then(r => r.json())
+                ]);
+                
+                let html = `
+                    <div class="table-container">
+                        <table>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nazwa</th>
+                                <th>Kraj</th>
+                                <th>Akcje</th>
+                            </tr>
+                            ${breeders.map(breeder => {
+                                const country = countries.find(c => c.code === breeder.country_code);
+                                return `
+                                    <tr>
+                                        <td>${breeder.id}</td>
+                                        <td>${breeder.name}</td>
+                                        <td>${country ? country.name : breeder.country_code}</td>
+                                        <td>
+                                            <button class="edit-btn" onclick="showEditBreederForm(${breeder.id})">Edytuj</button>
+                                            <button class="delete-btn" onclick="deleteBreeder(${breeder.id})">Usuń</button>
+                                        </td>
+                                    </tr>
+                                    <tr id="editBreeder-${breeder.id}" class="edit-form">
+                                        <td colspan="4">
+                                            <input type="text" id="editBreederName-${breeder.id}" value="${breeder.name}">
+                                            <select id="editBreederCountry-${breeder.id}">
+                                                ${countries.map(c => `
+                                                    <option value="${c.code}" ${c.code === breeder.country_code ? 'selected' : ''}>
+                                                        ${c.name} (${c.code})
+                                                    </option>
+                                                `).join('')}
+                                            </select>
+                                            <button class="save-btn" onclick="updateBreeder(${breeder.id})">Zapisz</button>
+                                            <button onclick="hideEditForm('editBreeder-${breeder.id}')">Anuluj</button>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </table>
+                    </div>
+                    <div>
+                        <h3>Dodaj nowego hodowcę</h3>
+                        <input type="text" id="newBreederName" placeholder="Nazwa hodowcy">
+                        <select id="newBreederCountry">
+                            ${countries.map(c => `
+                                <option value="${c.code}">${c.name} (${c.code})</option>
+                            `).join('')}
+                        </select>
+                        <button class="save-btn" onclick="addBreeder()">Dodaj hodowcę</button>
+                    </div>
+                `;
+                
+                document.getElementById('breedersList').innerHTML = html;
+            } catch (error) {
+                console.error('Błąd pobierania hodowców:', error);
+            }
+        }
+
+        function showEditBreederForm(id) {
+            document.querySelectorAll('.edit-form').forEach(f => f.style.display = 'none');
+            document.getElementById(`editBreeder-${id}`).style.display = 'table-row';
+        }
+
+        async function updateBreeder(id) {
+            const name = document.getElementById(`editBreederName-${id}`).value;
+            const country_code = document.getElementById(`editBreederCountry-${id}`).value;
+            
+            try {
+                const response = await fetch(`${API_URL}/breeders/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, country_code })
+                });
+                
+                if (response.ok) {
+                    fetchBreeders();
+                } else {
+                    const error = await response.json();
+                    alert(`Błąd: ${error.error}`);
+                }
+            } catch (error) {
+                console.error('Błąd aktualizacji hodowcy:', error);
+            }
+        }
+
+        async function addBreeder() {
+            const name = document.getElementById('newBreederName').value;
+            const country_code = document.getElementById('newBreederCountry').value;
+            
+            try {
+                const response = await fetch(`${API_URL}/breeders`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, country_code })
+                });
+                
+                if (response.ok) {
+                    document.getElementById('newBreederName').value = '';
+                    fetchBreeders();
+                } else {
+                    const error = await response.json();
+                    alert(`Błąd: ${error.error}`);
+                }
+            } catch (error) {
+                console.error('Błąd dodawania hodowcy:', error);
+            }
+        }
+
+        async function deleteBreeder(id) {
+            if (confirm(`Czy na pewno chcesz usunąć hodowcę ${id}?`)) {
+                try {
+                    const response = await fetch(`${API_URL}/breeders/${id}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (!response.ok) {
+                        const error = await response.json();
+                        alert(`Błąd: ${error.error}`);
+                    }
+                    fetchBreeders();
+                } catch (error) {
+                    console.error('Błąd usuwania hodowcy:', error);
+                }
+            }
+        }
+
+        // Konie
+        async function fetchHorses() {
+            const gender = document.getElementById('horseGenderFilter').value;
+            const url = gender ? `${API_URL}/horses?gender=${gender}` : `${API_URL}/horses`;
+            
+            try {
+                const [horses, breeders, allHorses] = await Promise.all([
+                    fetch(url).then(r => r.json()),
+                    fetch(`${API_URL}/breeders`).then(r => r.json()),
+                    fetch(`${API_URL}/horses`).then(r => r.json())
+                ]);
+                
+                const mares = allHorses.filter(h => h.gender === 'mare');
+                const stallions = allHorses.filter(h => h.gender === 'stallion');
+                
+                let html = `
+                    <table>
+                        <tr>
+                            <th style="min-width:50px">ID</th>
+                            <th style="min-width:100px">Imię</th>
+                            <th style="min-width:80px">Rasa</th>
+                            <th style="min-width:80px">Płeć</th>
+                            <th style="min-width:60px">Rok</th>
+                            <th style="min-width:100px">Data ur.</th>
+                            <th style="min-width:100px">Maść</th>
+                            <th style="min-width:200px">Akcje</th>
+                        </tr>
+                        ${horses.map(horse => {
+                            const birthDate = horse.birth_date 
+                                ? new Date(horse.birth_date).toLocaleDateString('pl-PL') 
+                                : 'Nieznana';
+                            
+                            return `
+                            <tr>
+                                <td>${horse.id}</td>
+                                <td>${horse.name}</td>
+                                <td>${horse.breed}</td>
+                                <td>${translateGender(horse.gender)}</td>
+                                <td>${horse.birth_year || '-'}</td>
+                                <td>${birthDate}</td>
+                                <td>${horse.color}</td>
+                                <td>
+                                    <button class="edit-btn" onclick="showEditHorseForm(${horse.id})">Edytuj</button>
+                                    <button class="delete-btn" onclick="deleteHorse(${horse.id})">Usuń</button>
+                                    <button onclick="fetchOffspring(${horse.id})">Potomstwo</button>
+                                </td>
+                            </tr>
+                            <tr id="editHorse-${horse.id}" class="edit-form">
+                                <td colspan="8">
+                                    <form onsubmit="updateHorse(${horse.id}); return false;">
+                                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                                            <div>
+                                                <label>Imię:</label>
+                                                <input type="text" id="editHorseName-${horse.id}" value="${horse.name}" required>
+                                            </div>
+                                            <div>
+                                                <label>Rasa:</label>
+                                                <input type="text" id="editHorseBreed-${horse.id}" value="${horse.breed}">
+                                            </div>
+                                            <div>
+                                                <label>Rok urodzenia:</label>
+                                                <input type="number" id="editHorseYear-${horse.id}" value="${horse.birth_year || ''}">
+                                            </div>
+                                            <div>
+                                                <label>Data urodzenia:</label>
+                                                <input type="date" id="editHorseDate-${horse.id}" value="${horse.birth_date || ''}">
+                                            </div>
+                                            <div>
+                                                <label>Płeć:</label>
+                                                <select id="editHorseGender-${horse.id}">
+                                                    <option value="mare" ${horse.gender === 'mare' ? 'selected' : ''}>Klacz</option>
+                                                    <option value="stallion" ${horse.gender === 'stallion' ? 'selected' : ''}>Ogier</option>
+                                                    <option value="gelding" ${horse.gender === 'gelding' ? 'selected' : ''}>Wałach</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label>Maść:</label>
+                                                <input type="text" id="editHorseColor-${horse.id}" value="${horse.color}">
+                                            </div>
+                                            <div>
+                                                <label>Matka (ID):</label>
+                                                <select id="editHorseMother-${horse.id}">
+                                                    <option value="">- Wybierz -</option>
+                                                    ${mares.map(mare => `
+                                                        <option value="${mare.id}" ${mare.id === horse.mother_id ? 'selected' : ''}>
+                                                            ${mare.name} (ID: ${mare.id})
+                                                        </option>
+                                                    `).join('')}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label>Ojciec (ID):</label>
+                                                <select id="editHorseFather-${horse.id}">
+                                                    <option value="">- Wybierz -</option>
+                                                    ${stallions.map(stallion => `
+                                                        <option value="${stallion.id}" ${stallion.id === horse.father_id ? 'selected' : ''}>
+                                                            ${stallion.name} (ID: ${stallion.id})
+                                                        </option>
+                                                    `).join('')}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label>Hodowca:</label>
+                                                <select id="editHorseBreeder-${horse.id}">
+                                                    <option value="">- Wybierz -</option>
+                                                    ${breeders.map(breeder => `
+                                                        <option value="${breeder.id}" ${breeder.id === horse.breeder_id ? 'selected' : ''}>
+                                                            ${breeder.name}
+                                                        </option>
+                                                    `).join('')}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div style="margin-top: 10px;">
+                                            <button type="submit" class="save-btn">Zapisz</button>
+                                            <button type="button" onclick="hideEditForm('editHorse-${horse.id}')">Anuluj</button>
+                                        </div>
+                                    </form>
+                                </td>
+                            </tr>
+                            `;
+                        }).join('')}
+                    </table>
+                    <div style="margin-top: 20px;">
+                        <h3>Dodaj nowego konia</h3>
+                        <form onsubmit="addHorse(); return false;" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                            <div>
+                                <label>Imię:</label>
+                                <input type="text" id="newHorseName" required>
+                            </div>
+                            <div>
+                                <label>Rasa:</label>
+                                <input type="text" id="newHorseBreed">
+                            </div>
+                            <div>
+                                <label>Rok urodzenia:</label>
+                                <input type="number" id="newHorseYear">
+                            </div>
+                            <div>
+                                <label>Data urodzenia:</label>
+                                <input type="date" id="newHorseDate">
+                            </div>
+                            <div>
+                                <label>Płeć:</label>
+                                <select id="newHorseGender">
+                                    <option value="mare">Klacz</option>
+                                    <option value="stallion">Ogier</option>
+                                    <option value="gelding">Wałach</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Maść:</label>
+                                <input type="text" id="newHorseColor">
+                            </div>
+                            <div>
+                                <label>Matka (ID):</label>
+                                <select id="newHorseMother">
+                                    <option value="">- Wybierz -</option>
+                                    ${mares.map(mare => `
+                                        <option value="${mare.id}">${mare.name} (ID: ${mare.id})</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label>Ojciec (ID):</label>
+                                <select id="newHorseFather">
+                                    <option value="">- Wybierz -</option>
+                                    ${stallions.map(stallion => `
+                                        <option value="${stallion.id}">${stallion.name} (ID: ${stallion.id})</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label>Hodowca:</label>
+                                <select id="newHorseBreeder">
+                                    <option value="">- Wybierz -</option>
+                                    ${breeders.map(breeder => `
+                                        <option value="${breeder.id}">${breeder.name}</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <button type="submit" class="save-btn">Dodaj konia</button>
+                            </div>
+                        </form>
+                    </div>
+                `;
+                
+                document.getElementById('horsesList').innerHTML = html;
+            } catch (error) {
+                console.error('Błąd pobierania koni:', error);
+            }
+        }
+
+        function showEditHorseForm(id) {
+            document.querySelectorAll('.edit-form').forEach(f => f.style.display = 'none');
+            document.getElementById(`editHorse-${id}`).style.display = 'table-row';
+        }
+
+        async function updateHorse(id) {
+            const horseData = {
+                name: document.getElementById(`editHorseName-${id}`).value,
+                breed: document.getElementById(`editHorseBreed-${id}`).value,
+                birth_year: document.getElementById(`editHorseYear-${id}`).value || null,
+                birth_date: document.getElementById(`editHorseDate-${id}`).value || null,
+                gender: document.getElementById(`editHorseGender-${id}`).value,
+                color: document.getElementById(`editHorseColor-${id}`).value,
+                mother_id: document.getElementById(`editHorseMother-${id}`).value || null,
+                father_id: document.getElementById(`editHorseFather-${id}`).value || null,
+                breeder_id: document.getElementById(`editHorseBreeder-${id}`).value || null
+            };
+            
+            try {
+                const response = await fetch(`${API_URL}/horses/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(horseData)
+                });
+                
+                if (response.ok) {
+                    fetchHorses();
+                } else {
+                    const error = await response.json();
+                    alert(`Błąd: ${error.error}`);
+                }
+            } catch (error) {
+                console.error('Błąd aktualizacji konia:', error);
+            }
+        }
+
+        async function addHorse() {
+            const horseData = {
+                name: document.getElementById('newHorseName').value,
+                breed: document.getElementById('newHorseBreed').value,
+                birth_year: document.getElementById('newHorseYear').value || null,
+                birth_date: document.getElementById('newHorseDate').value || null,
+                gender: document.getElementById('newHorseGender').value,
+                color: document.getElementById('newHorseColor').value,
+                mother_id: document.getElementById('newHorseMother').value || null,
+                father_id: document.getElementById('newHorseFather').value || null,
+                breeder_id: document.getElementById('newHorseBreeder').value || null
+            };
+            
+            try {
+                const response = await fetch(`${API_URL}/horses`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(horseData)
+                });
+                
+                if (response.ok) {
+                    document.querySelectorAll('#horsesList form input, #horsesList form select').forEach(el => {
+                        if (el.id.startsWith('newHorse')) el.value = '';
+                    });
+                    fetchHorses();
+                } else {
+                    const error = await response.json();
+                    alert(`Błąd: ${error.error}`);
+                }
+            } catch (error) {
+                console.error('Błąd dodawania konia:', error);
+            }
+        }
+
+        async function deleteHorse(id) {
+            if (confirm(`Czy na pewno chcesz usunąć konia ${id}?`)) {
+                try {
+                    const response = await fetch(`${API_URL}/horses/${id}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (!response.ok) {
+                        const error = await response.json();
+                        alert(`Błąd: ${error.error}`);
+                    }
+                    fetchHorses();
+                } catch (error) {
+                    console.error('Błąd usuwania konia:', error);
+                }
+            }
+        }
+
+        async function fetchOffspring(id) {
+            try {
+                const offspring = await fetch(`${API_URL}/horses/${id}/offspring`).then(r => r.json());
+                
+                let html = `
+                    <h3>Potomstwo konia ID ${id}</h3>
+                    <div class="table-container">
+                        <table>
+                            <tr>
+                                <th>ID</th>
+                                <th>Imię</th>
+                                <th>Rasa</th>
+                                <th>Płeć</th>
+                                <th>Maść</th>
+                            </tr>
+                            ${offspring.map(horse => `
+                                <tr>
+                                    <td>${horse.id}</td>
+                                    <td>${horse.name}</td>
+                                    <td>${horse.breed}</td>
+                                    <td>${translateGender(horse.gender)}</td>
+                                    <td>${horse.color}</td>
+                                </tr>
+                            `).join('')}
+                        </table>
+                    </div>
+                    <button onclick="fetchHorses()">Powrót do listy koni</button>
+                `;
+                
+                document.getElementById('horsesList').innerHTML = html;
+            } catch (error) {
+                console.error('Błąd pobierania potomstwa:', error);
+            }
+        }
+
+        // Rodowody
+        async function fetchPedigree() {
+            const horseId = document.getElementById('pedigreeHorseId').value;
+            const depth = document.getElementById('pedigreeDepth').value;
+            
+            if (!horseId) {
+                alert('Podaj ID konia');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/horses/${horseId}/pedigree?depth=${depth}`);
+                const pedigree = await response.json();
+                
+                if (response.ok) {
+                    displayPedigree(pedigree);
+                } else {
+                    const error = await response.json();
+                    alert(`Błąd: ${error.error}`);
+                }
+            } catch (error) {
+                console.error('Błąd pobierania rodowodu:', error);
+            }
+        }
+
+        function displayPedigree(pedigree, level = 0) {
+            if (!pedigree) {
+                document.getElementById('pedigreeDisplay').innerHTML = '<p>Nie znaleziono rodowodu</p>';
+                return;
+            }
+            
+            let html = `
+                <div class="pedigree" style="margin-left: ${level * 20}px;">
+                    <h3>${pedigree.name} (ID: ${pedigree.id})</h3>
+                    <p>Rasa: ${pedigree.breed}, Płeć: ${translateGender(pedigree.gender)}</p>
+            `;
+            
+            if (pedigree.mother) {
+                html += `<h4>Matka:</h4><div class="parent">${displayPedigree(pedigree.mother, level + 1)}</div>`;
+            }
+            
+            if (pedigree.father) {
+                html += `<h4>Ojciec:</h4><div class="parent">${displayPedigree(pedigree.father, level + 1)}</div>`;
+            }
+            
+            html += '</div>';
+            
+            if (level === 0) {
+                document.getElementById('pedigreeDisplay').innerHTML = html;
+            }
+            
+            return html;
+        }
+
+        // Pomocnicze
+        function hideEditForm(formId) {
+            document.getElementById(formId).style.display = 'none';
+        }
+
+        // Inicjalizacja
+        window.onload = function() {
+            fetchCountries();
+            fetchBreeders();
+            fetchHorses();
+        };
+    </script>
+</body>
+</html>

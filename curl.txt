@@ -1,0 +1,89 @@
+Countries:
+
+1. Pobieranie wszystkich krajów (GET):
+curl http://localhost:3000/countries
+
+2. Pobieranie konkretnego kraju (GET):
+curl http://localhost:3000/countries/PL
+
+3. Dodawanie nowego kraju (POST):
+curl -X POST http://localhost:3000/countries ^
+-H "Content-Type: application/json" ^
+-d "{\"code\":\"DE\",\"name\":\"Niemcy\"}"
+
+4. Edycja kraju (PUT):
+curl -X PUT http://localhost:3000/countries/DE ^
+-H "Content-Type: application/json" ^
+-d "{\"name\":\"Republika Federalna Niemiec\"}"
+
+5. Usuwanie kraju (DELETE):
+curl -X DELETE http://localhost:3000/countries/DE
+
+
+Breeders:
+
+1. Pobieranie wszystkich hodowców (GET)
+curl http://localhost:3000/breeders
+
+2. Pobieranie konkretnego hodowcy (GET)
+curl http://localhost:3000/breeders/1
+
+3. Dodawanie nowego hodowcy (POST)
+curl -X POST http://localhost:3000/breeders ^
+-H "Content-Type: application/json" ^
+-d "{\"name\":\"Testowa Stajnia\",\"country_code\":\"PL\"}"
+
+4. Edycja hodowcy (PUT)
+curl -X PUT http://localhost:3000/breeders/73 ^
+-H "Content-Type: application/json" ^
+-d "{\"name\":\"Nowa Nazwa Stajni\",\"country_code\":\"PL\"}"
+
+5. Usuwanie hodowcy (DELETE)
+curl -X DELETE http://localhost:3000/breeders/1
+
+
+Horses:
+
+1. Pobieranie wszystkich koni (GET)
+curl http://localhost:3000/horses
+
+2. Pobieranie koni z filtrem płci (GET)
+curl http://localhost:3000/horses?gender=mare
+
+3. Pobieranie konkretnego konia (GET)
+curl http://localhost:3000/horses/1
+
+4. Dodawanie nowego konia (POST)
+curl -X POST http://localhost:3000/horses ^
+-H "Content-Type: application/json" ^
+-d "{\"name\":\"Płotka\",\"breed\":\"xx\",\"gender\":\"stallion\",\"color\":\"Kary\",\"birth_year\":2015,\"mother_id\":2,\"father_id\":3,\"breeder_id\":1}"
+
+5. Edycja konia (PUT)
+curl -X PUT "http://localhost:3000/horses/1" ^
+-H "Content-Type: application/json" ^
+-d "{\"name\":\"Bystry\",\"breed\":\"xx\",\"birth_year\":2020,\"birth_date\":\"2020-05-15\",\"gender\":\"stallion\",\"color\":\"Kary\"}"
+
+6. Usuwanie konia (DELETE)
+curl -X DELETE http://localhost:3000/horses/1
+
+7. Pobieranie rodowodu (JSON)
+curl http://localhost:3000/horses/1/pedigree?depth=3
+
+8. Pobieranie rodowodu (HTML)
+curl http://localhost:3000/horses/1/pedigree/html?depth=2
+
+9. Pobieranie potomstwa
+curl http://localhost:3000/horses/1/offspring
+
+10. Pobieranie potomstwa z filtrami
+curl http://localhost:3000/horses/1/offspring?gender=mare&breeder_id=1
+
+
+#dodaj klacz
+curl -X POST http://localhost:3000/horses -H "Content-Type: application/json" -d "{\"name\":\"Luna\",\"breed\":\"oo\",\"gender\":\"mare\",\"color\":\"bay\",\"birth_year\":2018,\"birth_date\":\"2018-05-15\",\"breeder_id\":1}"
+
+#dodaj ogiera
+curl -X POST http://localhost:3000/horses -H "Content-Type: application/json" -d "{\"name\":\"Thunder\",\"breed\":\"xx\",\"gender\":\"stallion\",\"color\":\"black\",\"birth_year\":2017,\"birth_date\":\"2017-03-10\",\"breeder_id\":1}"
+
+#dodaj potomka (rasa potomka zostanie nadpisana na podstawie ras rodzicow, xo podajemy jako domyslna wartosc)
+curl -X POST http://localhost:3000/horses -H "Content-Type: application/json" -d "{\"name\":\"Star\",\"breed\":\"xo\",\"gender\":\"mare\",\"color\":\"chestnut\",\"birth_year\":2023,\"birth_date\":\"2023-06-20\",\"mother_id\":1,\"father_id\":2,\"breeder_id\":1}"

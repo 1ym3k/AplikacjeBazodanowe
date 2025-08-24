@@ -1,0 +1,22 @@
+#Pobranie obrazu dockerowego serwera postgresql
+docker pull postgres:latest
+
+#Uruchomienie serwera bazy danych konie tworząc kontener o nazwie postgresql
+docker run --detach --env POSTGRES_USER=postgres --env POSTGRES_PASSWORD=password --env POSTGRES_DB=konie --publish 5432:5432 --volume ~/pgdata:/var/lib/postgresql/data --name konie postgres
+
+
+#Uzywajac zwróconego ID kontenera przechodzimy do wnętrza kontenera na poziom systemu Debian, by korzystać z polecen psql
+docker exec -it 98c3ef9dbc8be558404323ce9e85ff3eabcb30383ec1d7d4a46b2baee4ed6fa4 bash
+
+#wchodzimy do psql z nasza nazwa uzytkownika
+psql -U postgres
+CREATE DATABASE konie;
+
+#Uruchomienie migracji
+npx knex migrate:latest
+
+#Uruchomienie seedow
+npx knex seed:run
+
+#Uruchomienie aplikacji lokalnie:
+npm start
