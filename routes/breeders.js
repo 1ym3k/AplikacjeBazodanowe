@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/connection');
+const { getRecordById, recordExistsByCode, checkIfUsed } = require('../utils/dbUtils');
 
 // Pobieranie wszystkich hodowców
 router.get('/', async (req, res) => {
@@ -15,8 +16,10 @@ router.get('/', async (req, res) => {
 // Pobieranie hodowcy po ID
 router.get('/:id', async (req, res) => {
   try {
-    const breeder = await db('breeders').where({ id: req.params.id }).first();
-    if (!breeder) return res.status(404).json({ error: 'Hodowca nie znaleziony' });
+    const breeder = await getRecordById('breeders', req.params.id);
+    if (!breeder) {
+      return res.status(404).json({ error: 'Hodowca nie znaleziony' });
+    }
     res.json(breeder);
   } catch (error) {
     res.status(500).json({ error: 'Błąd podczas pobierania hodowcy' });
@@ -27,51 +30,49 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   const { name, country_code } = req.body;
 
-  // Walidacja danych
   if (!name || !country_code) {
     return res.status(400).json({ error: 'Nazwa hodowcy i kod kraju są wymagane' });
   }
 
   try {
-    // Sprawdzanie, czy kraj istnieje
-    const country = await db('countries').where({ code: country_code }).first();
-    if (!country) {
-      return res.status(400).json({ error: 'Podany kraj nie istnieje' });
+    if (!await recordExistsByCode('countries', country_code)) {
+      return res.status(400).json({ error: 'Kraj o podanym kodzie nie istnieje' });
     }
+    const [newBreeder] = await db('breeders')
+      .insert({ name, country_code })
+      .returning('*');
 
-    const [newBreeder] = await db('breeders').insert({ name, country_code }).returning('*');
     res.status(201).json(newBreeder);
   } catch (error) {
     res.status(500).json({ error: 'Błąd podczas dodawania hodowcy' });
   }
 });
- 
+
 // Edycja hodowcy
 router.put('/:id', async (req, res) => {
-  const { name, country_code } = req.body;
+  const updates = req.body;
+  const { id } = req.params;
 
-  // Walidacja danych
-  if (!name || !country_code) {
-    return res.status(400).json({ error: 'Nazwa hodowcy i kod kraju są wymagane' });
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'Brak danych do aktualizacji' });
   }
 
   try {
-    // Sprawdzanie, czy kraj istnieje
-    const country = await db('countries').where({ code: country_code }).first();
-    if (!country) {
-      return res.status(400).json({ error: 'Podany kraj nie istnieje' });
-    }
-
-    const updated = await db('breeders')
-      .where({ id: req.params.id })
-      .update({ name, country_code })
-      .returning('*');
-
-    if (updated.length === 0) {
+    const existingBreeder = await getRecordById('breeders', id);
+    if (!existingBreeder) {
       return res.status(404).json({ error: 'Hodowca nie znaleziony' });
     }
 
-    res.json(updated[0]);
+    if (updates.country_code && !await recordExistsByCode('countries', updates.country_code)) {
+      return res.status(400).json({ error: 'Kraj o podanym kodzie nie istnieje' });
+    }
+
+    const [updatedBreeder] = await db('breeders')
+      .where({ id })
+      .update(updates)
+      .returning('*');
+
+    res.json(updatedBreeder);
   } catch (error) {
     res.status(500).json({ error: 'Błąd podczas edycji hodowcy' });
   }
@@ -80,26 +81,19 @@ router.put('/:id', async (req, res) => {
 // Usuwanie hodowcy
 router.delete('/:id', async (req, res) => {
   try {
-    console.log(`Próba usunięcia hodowcy o ID: ${req.params.id}`); // Log rozpoczęcia operacji
-    
-    // Sprawdzanie, czy hodowca jest używany przez konie
-    const usedByHorses = await db('horses').where({ breeder_id: req.params.id }).first();
-    if (usedByHorses) {
-      console.log(`Nie można usunąć hodowcy ID: ${req.params.id} - jest przypisany do koni`);
+    if (await checkIfUsed('horses', 'breeder_id', req.params.id)) {
       return res.status(400).json({ error: 'Nie można usunąć hodowcy, który jest przypisany do koni' });
     }
 
     const deleted = await db('breeders').where({ id: req.params.id }).del();
     if (deleted === 0) {
-      console.log(`Hodowca ID: ${req.params.id} nie znaleziony`);
       return res.status(404).json({ error: 'Hodowca nie znaleziony' });
     }
 
-    console.log(`Pomyślnie usunięto hodowcę ID: ${req.params.id}`);
     res.status(204).send();
   } catch (error) {
-    console.error(`Błąd podczas usuwania hodowcy ID: ${req.params.id}:`, error.message);
     res.status(500).json({ error: 'Błąd podczas usuwania hodowcy' });
   }
 });
+
 module.exports = router;

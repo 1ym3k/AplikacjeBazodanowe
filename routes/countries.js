@@ -16,7 +16,9 @@ router.get('/', async (req, res) => {
 router.get('/:code', async (req, res) => {
   try {
     const country = await db('countries').where({ code: req.params.code }).first();
-    if (!country) return res.status(404).json({ error: 'Kraj nie znaleziony' });
+    if (!country) {
+      return res.status(404).json({ error: 'Kraj nie znaleziony' });
+    }
     res.json(country);
   } catch (error) {
     res.status(500).json({ error: 'Błąd podczas pobierania kraju' });
@@ -27,7 +29,6 @@ router.get('/:code', async (req, res) => {
 router.post('/', async (req, res) => {
   const { code, name } = req.body;
 
-  // Walidacja danych
   if (!code || !name) {
     return res.status(400).json({ error: 'Kod ISO i nazwa kraju są wymagane' });
   }
@@ -36,13 +37,14 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    // Sprawdzanie unikalności kodu
     const existingCountry = await db('countries').where({ code }).first();
     if (existingCountry) {
-      return res.status(400).json({ error: 'Kraj o podanym kodzie już istnieje' });
+      return res.status(409).json({ error: 'Kraj o podanym kodzie już istnieje' });
     }
 
-    const [newCountry] = await db('countries').insert({ code, name }).returning('*');
+    const [newCountry] = await db('countries')
+      .insert({ code, name })
+      .returning('*');
     res.status(201).json(newCountry);
   } catch (error) {
     res.status(500).json({ error: 'Błąd podczas dodawania kraju' });
@@ -51,17 +53,17 @@ router.post('/', async (req, res) => {
 
 // Edycja kraju
 router.put('/:code', async (req, res) => {
-  const { name } = req.body;
+  const updates = req.body;
+  const { code } = req.params;
 
-  // Walidacja danych
-  if (!name) {
-    return res.status(400).json({ error: 'Nazwa kraju jest wymagana' });
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'Brak danych do aktualizacji' });
   }
 
   try {
     const updated = await db('countries')
-      .where({ code: req.params.code })
-      .update({ name })
+      .where({ code })
+      .update(updates)
       .returning('*');
 
     if (updated.length === 0) {
@@ -77,25 +79,18 @@ router.put('/:code', async (req, res) => {
 // Usuwanie kraju
 router.delete('/:code', async (req, res) => {
   try {
-    console.log(`Próba usunięcia kraju o kodzie: ${req.params.code}`); // Log rozpoczęcia
-
-    // Sprawdzanie, czy kraj jest używany przez hodowców
     const usedByBreeders = await db('breeders').where({ country_code: req.params.code }).first();
     if (usedByBreeders) {
-      console.log(`Nie można usunąć kraju ${req.params.code} - używany przez hodowców`);
       return res.status(400).json({ error: 'Nie można usunąć kraju, który jest używany przez hodowców' });
     }
 
     const deleted = await db('countries').where({ code: req.params.code }).del();
     if (deleted === 0) {
-      console.log(`Kraj ${req.params.code} nie znaleziony`);
       return res.status(404).json({ error: 'Kraj nie znaleziony' });
     }
 
-    console.log(`Pomyślnie usunięto kraj: ${req.params.code}`); // Log sukcesu
     res.status(204).send();
   } catch (error) {
-    console.error(`Błąd usuwania kraju ${req.params.code}:`, error.message); // Log błędu
     res.status(500).json({ error: 'Błąd podczas usuwania kraju' });
   }
 });
