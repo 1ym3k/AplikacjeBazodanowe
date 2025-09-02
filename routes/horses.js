@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/connection');
-const { calculateBreed, updateDescendantBreeds } = require('../utils/horseUtils');
+const { calculateBreed, updateDescendantBreeds, getPossibleBreeds, getPedigree, renderPedigree } = require('../utils/horseUtils');
 const { recordExists, checkIfUsed, getRecordById } = require('../utils/dbUtils');
 
 // Pobieranie wszystkich koni
@@ -42,6 +42,10 @@ router.post('/', async (req, res) => {
   if (birth_date && isNaN(Date.parse(birth_date))) {
     return res.status(400).json({ error: 'Niepoprawny format daty urodzenia' });
   }
+  const validGenders = ['mare', 'stallion', 'gelding'];
+  if (!validGenders.includes(gender)) {
+    return res.status(400).json({ error: 'Płeć musi być jedną z: mare, stallion, gelding' });
+  }
 
   try {
     if (mother_id) {
@@ -58,25 +62,45 @@ router.post('/', async (req, res) => {
 
     let finalBreed = breed;
 
-    const hasMother = mother_id && await recordExists('horses', mother_id);
-    const hasFather = father_id && await recordExists('horses', father_id);
+    const newMotherId = mother_id;
+    const newFatherId = father_id;
 
-    if (hasMother || hasFather) {
-      let parents = [];
-      if (hasMother) {
-        parents.push(mother_id);
-      }
-      if (hasFather) {
-        parents.push(father_id);
-      }
-      
-      const parentData = await db('horses').whereIn('id', parents).select('id', 'breed');
-      const motherBreed = parentData.find(p => p.id === mother_id)?.breed;
-      const fatherBreed = parentData.find(p => p.id === father_id)?.breed;
+    if (newMotherId && newFatherId) {
+      // Obaj rodzice znani -> rasa zawsze liczona automatycznie
+      const parents = await db('horses')
+        .whereIn('id', [newMotherId, newFatherId])
+        .select('id', 'breed');
+
+      const motherBreed = parents.find(p => p.id === newMotherId)?.breed;
+      const fatherBreed = parents.find(p => p.id === newFatherId)?.breed;
+
       finalBreed = calculateBreed(motherBreed, fatherBreed);
+    }
+    else if (newMotherId || newFatherId) {
+      const parentIds = [newMotherId, newFatherId].filter(Boolean).map(id => parseInt(id, 10)); // Konwersja na liczbę
+      console.log('ID rodziców:', parentIds);
+
+      const parents = await db('horses')
+        .whereIn('id', parentIds)
+        .select('id', 'breed');
+      console.log('Rodzice pobrani z bazy:', JSON.stringify(parents, null, 2));
+
+      const motherBreed = parents.find(p => p.id === parseInt(newMotherId, 10))?.breed || null;
+      const fatherBreed = parents.find(p => p.id === parseInt(newFatherId, 10))?.breed || null;
+      console.log('Rasy:', { motherBreed, fatherBreed, requested: breed });
+
+      const allowedBreeds = getPossibleBreeds(motherBreed, fatherBreed);
+      console.log('Dozwolone rasy:', allowedBreeds);
+
+      if (breed && !allowedBreeds.includes(breed)) {
+        return res.status(400).json({
+          error: `Nie można ustawić tej rasy. Dozwolone: ${allowedBreeds.join(', ')}`
+        });
+      }
+      finalBreed = breed || allowedBreeds[0] || 'xo';
     } else {
-      // Przypadek, gdy nie podano żadnego rodzica
-      finalBreed = 'xo';
+      // Brak rodziców
+      finalBreed = breed || 'xo';
     }
 
     const [newHorse] = await db('horses')
@@ -104,10 +128,12 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Koń nie znaleziony' });
     }
 
+    // Płeć
     if (updates.gender && updates.gender !== currentHorse.gender && updates.gender !== 'gelding' && await checkIfUsed('horses', 'mother_id', id) || await checkIfUsed('horses', 'father_id', id)) {
       return res.status(400).json({ error: 'Koń z potomstwem może mieć zmienioną płeć tylko na wałacha (gelding)' });
     }
 
+    // Rodzice
     if (updates.mother_id) {
       const mother = await getRecordById('horses', updates.mother_id);
       if (!mother || mother.gender !== 'mare') return res.status(400).json({ error: 'Matka musi być klaczą (mare)' });
@@ -122,8 +148,9 @@ router.put('/:id', async (req, res) => {
 
     const finalData = { ...currentHorse, ...updates };
 
+    // Walidacja dat urodzenia
     if ((updates.birth_year || updates.birth_date) && (finalData.mother_id || finalData.father_id)) {
-      const parents = await db('horses').whereIn('id', [finalData.mother_id, finalData.father_id]).select('birth_year', 'birth_date');
+      const parents = await db('horses').whereIn('id', [finalData.mother_id, finalData.father_id]).select('id', 'birth_year', 'birth_date');
       const mother = parents.find(p => p.id === finalData.mother_id) || {};
       const father = parents.find(p => p.id === finalData.father_id) || {};
 
@@ -139,18 +166,36 @@ router.put('/:id', async (req, res) => {
       }
     }
 
-    let finalBreed = updates.breed;
+    // Walidacja rasy względem rodziców
     const newMotherId = updates.mother_id || currentHorse.mother_id;
     const newFatherId = updates.father_id || currentHorse.father_id;
 
+    if (updates.breed) {
+      // Użytkownik chce zmienić rasę ręcznie
+      if (newMotherId || newFatherId) {
+        const parents = await db('horses')
+          .whereIn('id', [newMotherId, newFatherId])
+          .select('id', 'breed');
+
+        const motherBreed = parents.find(p => p.id === newMotherId)?.breed;
+        const fatherBreed = parents.find(p => p.id === newFatherId)?.breed;
+
+        const allowedBreeds = getPossibleBreeds(motherBreed, fatherBreed);
+
+        if (!allowedBreeds.includes(updates.breed)) {
+          return res.status(400).json({
+            error: `Nie można ustawić tej rasy. Dozwolone: ${allowedBreeds.join(', ')}`
+          });
+        }
+      }
+    }
+
+    // Jeśli podano obu rodziców -> rasa zawsze liczona automatycznie
     if (newMotherId && newFatherId) {
       const parents = await db('horses').whereIn('id', [newMotherId, newFatherId]).select('id', 'breed');
       const motherBreed = parents.find(p => p.id === newMotherId)?.breed;
       const fatherBreed = parents.find(p => p.id === newFatherId)?.breed;
-      finalBreed = calculateBreed(motherBreed, fatherBreed);
-    }
-    if (finalBreed) {
-      updates.breed = finalBreed;
+      updates.breed = calculateBreed(motherBreed, fatherBreed);
     }
 
     const [updatedHorse] = await db('horses').where({ id }).update(updates).returning('*');
@@ -165,6 +210,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+
 // Usuwanie konia
 router.delete('/:id', async (req, res) => {
   try {
@@ -177,7 +223,7 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Koń nie znaleziony' });
     }
 
-    res.status(204).send();
+    res.status(200).json({ message: `Usunięto konia ${req.params.id}` });
   } catch (error) {
     res.status(500).json({ error: 'Błąd podczas usuwania konia' });
   }
@@ -203,10 +249,12 @@ router.get('/:id/offspring', async (req, res) => {
     const horse = await getRecordById('horses', req.params.id);
     if (!horse) return res.status(404).json({ error: 'Koń nie znaleziony' });
 
-    let query = db('horses').where({ mother_id: req.params.id }).orWhere({ father_id: req.params.id });
+    let query = db('horses').where(function () {
+      this.where({ mother_id: req.params.id }).orWhere({ father_id: req.params.id });
+    });
 
-    if (gender) query = query.where({ gender });
-    if (breeder_id) query = query.where({ breeder_id });
+    if (gender) query = query.andWhere({ gender });
+    if (breeder_id) query = query.andWhere({ breeder_id });
 
     const offspring = await query.select('*');
     res.json(offspring);

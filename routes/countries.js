@@ -89,7 +89,7 @@ router.delete('/:code', async (req, res) => {
       return res.status(404).json({ error: 'Kraj nie znaleziony' });
     }
 
-    res.status(204).send();
+    res.status(200).json({message: `Kraj o kodzie '${req.params.code}' został usunięty`});
   } catch (error) {
     res.status(500).json({ error: 'Błąd podczas usuwania kraju' });
   }

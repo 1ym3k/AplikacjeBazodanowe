@@ -90,7 +90,7 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Hodowca nie znaleziony' });
     }
 
-    res.status(204).send();
+    res.status(200).json({ message: "Hodowca został usunięty"});
   } catch (error) {
     res.status(500).json({ error: 'Błąd podczas usuwania hodowcy' });
   }

@@ -1,7 +1,8 @@
 const db = require('../db/connection');
 
 /**
- * 
+ * Oblicza rasę konia na podstawie ras rodziców
+ * W przypadku braku danych o rodzicach przyjmuje arbitralnie 'xo'
  * @param {string} motherBreed 
  * @param {string} fatherBreed 
  * @returns {string}
@@ -34,36 +35,52 @@ function calculateBreed(motherBreed, fatherBreed) {
   const key2 = `${fatherBreed},${motherBreed}`;
   return rules[key1] || rules[key2] || 'xo';
 };
-// jesli znana rasa tylko jednego rodzica to dodac mozliwosc ustawienia rasy na kazda kompatybilna kombinacja z ta rodzica
 
 /**
- * 
+ * Aktualizuje rasy wszystkich potomków konia o podanym ID
  * @param {number} horseId 
  */
 async function updateDescendantBreeds(horseId) {
   const children = await db('horses')
     .where({ mother_id: horseId })
     .orWhere({ father_id: horseId })
-    .select('id', 'mother_id', 'father_id');
+    .select('id', 'mother_id', 'father_id', 'breed'); 
 
   for (const child of children) {
+    const parentIds = [child.mother_id, child.father_id].filter(Boolean);
+    const parents = await db('horses')
+      .whereIn('id', parentIds)
+      .select('id', 'breed');
+
+    const motherBreed = parents.find(p => p.id === child.mother_id)?.breed || null;
+    const fatherBreed = parents.find(p => p.id === child.father_id)?.breed || null;
+
+    let newBreed = child.breed;  
+
     if (child.mother_id && child.father_id) {
-      const parents = await db('horses')
-        .whereIn('id', [child.mother_id, child.father_id])
-        .select('id', 'breed');
-      const motherBreed = parents.find(p => p.id === child.mother_id)?.breed;
-      const fatherBreed = parents.find(p => p.id === child.father_id)?.breed;
-      const newBreed = calculateBreed(motherBreed, fatherBreed);
-      if (newBreed) {
-        await db('horses').where({ id: child.id }).update({ breed: newBreed });
-        await updateDescendantBreeds(child.id);
+      newBreed = calculateBreed(motherBreed, fatherBreed);
+    } 
+    else if (child.mother_id || child.father_id)
+       {
+      const allowedBreeds = getPossibleBreeds(motherBreed, fatherBreed);
+      if (!allowedBreeds.includes(child.breed)) {
+        newBreed = allowedBreeds[0] || 'xo';  
       }
+    }
+
+
+    if (newBreed && newBreed !== child.breed) {
+      await db('horses').where({ id: child.id }).update({ breed: newBreed });
+      await updateDescendantBreeds(child.id);
+    } else {
+
+      await updateDescendantBreeds(child.id);
     }
   }
 }
 
 /**
- * 
+ * Pobiera rodowód konia do określonej głębokości
  * @param {number} horseId id konia
  * @param {number} depth głębokość rodowodu (0 = tylko koń, 1 = rodzice, 2 = dziadkowie)
  * @returns {Promise<object | null>} Obiekt reprezentujący rodowód konia lub null
@@ -90,7 +107,7 @@ async function getPedigree(horseId, depth) {
 
 
 /**
- * 
+ * Renderuje rodowód konia jako wizualizację HTML
  * @param {object | null} pedigree obiekt z danymi do rodowodu konia
  * @param {*} level aktualny poziom zagnieżdżenia w rodowodzie
  * @returns {string} String HTML reprezentujący wizualizację rodowodu
@@ -131,10 +148,43 @@ function renderPedigree(pedigree, level = 0) {
   }
   return html;
 }
+/**
+ * Zwraca możliwe rasy dla potomstwa na podstawie ras rodziców
+ * @param {string} motherBreed 
+ * @param {string} fatherBreed 
+ * @returns {string[]}
+ */
+function getPossibleBreeds(motherBreed, fatherBreed) {
+  const breeds = new Set();
+
+  if (motherBreed && fatherBreed) {
+    breeds.add(calculateBreed(motherBreed, fatherBreed));
+  } else if (motherBreed || fatherBreed) {
+    const knownBreed = motherBreed || fatherBreed;
+    const possibleBreeds = {
+      'oo': ['oo', 'xo', 'xxoo'],
+      'xx': ['xx', 'xo', 'xxoo'],
+      'xo': ['xo', 'xxoo'],
+      'xxoo': ['xxoo']
+    };
+    if (possibleBreeds[knownBreed]) {
+      possibleBreeds[knownBreed].forEach(breed => breeds.add(breed));
+    } else {
+      breeds.add('xo');
+    }
+  } else {
+    breeds.add('oo');
+    breeds.add('xx');
+    breeds.add('xo');
+    breeds.add('xxoo');
+  }
+  return Array.from(breeds);
+}
 
 module.exports = {
   calculateBreed,
   updateDescendantBreeds,
   getPedigree,
-  renderPedigree
+  renderPedigree,
+  getPossibleBreeds
 };
