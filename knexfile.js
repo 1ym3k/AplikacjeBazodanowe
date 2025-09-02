@@ -10,7 +10,7 @@ module.exports = {
       host: PG_HOST || "localhost",
       port: PG_PORT || 5432,
       user: PG_USER || "postgres",
-      password: PG_PASSWORD || "password",
+      password: PG_PASSWORD || "postgres",
       database: PG_DATABASE || "konie"
     },
     pool: {
@@ -30,7 +30,7 @@ module.exports = {
       host: PG_HOST || "localhost",
       port: PG_PORT || 5432,
       user: PG_USER || "postgres",
-      password: PG_PASSWORD || "password",
+      password: PG_PASSWORD || "postgres",
       database: PG_DATABASE || "konie"
     },
     pool: {

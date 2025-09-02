@@ -39,9 +39,6 @@ router.post('/', async (req, res) => {
   if (!name || !gender || !color) {
     return res.status(400).json({ error: 'Nazwa, płeć i kolor są wymagane' });
   }
-  if ((!mother_id || !father_id) && !breed) {
-    return res.status(400).json({ error: 'Rasa jest wymagana, jeśli nie podano obu rodziców' });
-  }
   if (birth_date && isNaN(Date.parse(birth_date))) {
     return res.status(400).json({ error: 'Niepoprawny format daty urodzenia' });
   }
@@ -60,11 +57,26 @@ router.post('/', async (req, res) => {
     }
 
     let finalBreed = breed;
-    if (mother_id && father_id) {
-      const parents = await db('horses').whereIn('id', [mother_id, father_id]).select('id', 'breed');
-      const motherBreed = parents.find(p => p.id === mother_id)?.breed;
-      const fatherBreed = parents.find(p => p.id === father_id)?.breed;
-      finalBreed = calculateBreed(motherBreed, fatherBreed) || breed || 'xo';
+
+    const hasMother = mother_id && await recordExists('horses', mother_id);
+    const hasFather = father_id && await recordExists('horses', father_id);
+
+    if (hasMother || hasFather) {
+      let parents = [];
+      if (hasMother) {
+        parents.push(mother_id);
+      }
+      if (hasFather) {
+        parents.push(father_id);
+      }
+      
+      const parentData = await db('horses').whereIn('id', parents).select('id', 'breed');
+      const motherBreed = parentData.find(p => p.id === mother_id)?.breed;
+      const fatherBreed = parentData.find(p => p.id === father_id)?.breed;
+      finalBreed = calculateBreed(motherBreed, fatherBreed);
+    } else {
+      // Przypadek, gdy nie podano żadnego rodzica
+      finalBreed = 'xo';
     }
 
     const [newHorse] = await db('horses')

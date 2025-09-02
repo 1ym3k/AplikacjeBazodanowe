@@ -1,5 +1,6 @@
 const db = require('../db/connection');
 
+
 /**
  * sprwadza czy rekord o podanym id istnieje w tabeli
  * @param {string} tableName - nazwa tabeli

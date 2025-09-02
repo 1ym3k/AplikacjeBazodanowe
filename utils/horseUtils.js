@@ -7,23 +7,33 @@ const db = require('../db/connection');
  * @returns {string}
  */
 function calculateBreed(motherBreed, fatherBreed) {
-  if (!motherBreed || !fatherBreed) return 'xo';
+
+  if (!motherBreed && !fatherBreed) {
+    return 'xo'; //brak obojga -> arbitralnie xo
+  }
+  if (motherBreed && !fatherBreed) {
+    return motherBreed;
+  }
+  if (!motherBreed && fatherBreed) {
+    return fatherBreed;
+  }
+
   const rules = {
     'oo,oo': 'oo',
     'oo,xo': 'xo',
     'oo,xx': 'xxoo',
+    'oo,xxoo': 'xxoo',
     'xx,xx': 'xx',
     'xx,xo': 'xo',
     'xx,xxoo': 'xxoo',
-    'xo,oo': 'xo',
-    'xxoo,xx': 'xxoo',
-    'oo,xxoo': 'xxoo'
+    'xo,xo': 'xo',
+    'xo,xxoo': 'xxoo',
+    'xxoo,xxoo': 'xxoo'
   };
   const key1 = `${motherBreed},${fatherBreed}`;
   const key2 = `${fatherBreed},${motherBreed}`;
   return rules[key1] || rules[key2] || 'xo';
-}
-//jesli rasa tylko jednego rodzica jest znana to zwraca ta rase, 
+};
 // jesli znana rasa tylko jednego rodzica to dodac mozliwosc ustawienia rasy na kazda kompatybilna kombinacja z ta rodzica
 
 /**
