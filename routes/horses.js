@@ -60,6 +60,27 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Hodowca nie istnieje' });
     }
 
+    //Walidacja wieku rodziców
+    if (birth_year || birth_date) {
+      const horseBirthYear = birth_year ? parseInt(birth_year) : new Date(birth_date).getFullYear();
+
+      if (mother_id) {
+        const mother = await getRecordById('horses', mother_id);
+        const motherBirthYear = mother.birth_year ? parseInt(mother.birth_year) : new Date(mother.birth_date).getFullYear();
+        if (horseBirthYear - motherBirthYear < 2) {
+          return res.status(400).json({ error: 'Matka musi być starsza o co najmniej 2 lata.' });
+        }
+      }
+
+      if (father_id) {
+        const father = await getRecordById('horses', father_id);
+        const fatherBirthYear = father.birth_year ? parseInt(father.birth_year) : new Date(father.birth_date).getFullYear();
+        if (horseBirthYear - fatherBirthYear < 2) {
+          return res.status(400).json({ error: 'Ojciec musi być starszy o co najmniej 2 lata.' });
+        }
+      }
+    }
+
     let finalBreed = breed;
 
     const newMotherId = mother_id;
@@ -149,20 +170,24 @@ router.put('/:id', async (req, res) => {
     const finalData = { ...currentHorse, ...updates };
 
     // Walidacja dat urodzenia
-    if ((updates.birth_year || updates.birth_date) && (finalData.mother_id || finalData.father_id)) {
-      const parents = await db('horses').whereIn('id', [finalData.mother_id, finalData.father_id]).select('id', 'birth_year', 'birth_date');
-      const mother = parents.find(p => p.id === finalData.mother_id) || {};
-      const father = parents.find(p => p.id === finalData.father_id) || {};
+    // Zaktualizowana walidacja wieku rodziców: muszą być starsi o co najmniej 2 lata
+    if (finalData.birth_year || finalData.birth_date) {
+      const horseBirthYear = finalData.birth_year ? parseInt(finalData.birth_year) : new Date(finalData.birth_date).getFullYear();
 
-      const horseBirthDate = new Date(finalData.birth_date);
-      const motherBirthDate = new Date(mother.birth_date);
-      const fatherBirthDate = new Date(father.birth_date);
-
-      if (mother.birth_date && horseBirthDate <= motherBirthDate) {
-        return res.status(400).json({ error: 'Matka musi być starsza od konia' });
+      if (finalData.mother_id) {
+        const mother = await getRecordById('horses', finalData.mother_id);
+        const motherBirthYear = mother.birth_year ? parseInt(mother.birth_year) : new Date(mother.birth_date).getFullYear();
+        if (horseBirthYear - motherBirthYear < 2) {
+          return res.status(400).json({ error: 'Matka musi być starsza o co najmniej 2 lata.' });
+        }
       }
-      if (father.birth_date && horseBirthDate <= fatherBirthDate) {
-        return res.status(400).json({ error: 'Ojciec musi być starszy od konia' });
+
+      if (finalData.father_id) {
+        const father = await getRecordById('horses', finalData.father_id);
+        const fatherBirthYear = father.birth_year ? parseInt(father.birth_year) : new Date(father.birth_date).getFullYear();
+        if (horseBirthYear - fatherBirthYear < 2) {
+          return res.status(400).json({ error: 'Ojciec musi być starszy o co najmniej 2 lata.' });
+        }
       }
     }
 
@@ -209,7 +234,6 @@ router.put('/:id', async (req, res) => {
     res.status(500).json({ error: 'Błąd podczas edycji konia: ' + error.message });
   }
 });
-
 
 // Usuwanie konia
 router.delete('/:id', async (req, res) => {

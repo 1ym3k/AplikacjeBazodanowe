@@ -8,7 +8,6 @@ const db = require('../db/connection');
  * @returns {string}
  */
 function calculateBreed(motherBreed, fatherBreed) {
-
   if (!motherBreed && !fatherBreed) {
     return 'xo'; //brak obojga -> arbitralnie xo
   }
@@ -44,7 +43,7 @@ async function updateDescendantBreeds(horseId) {
   const children = await db('horses')
     .where({ mother_id: horseId })
     .orWhere({ father_id: horseId })
-    .select('id', 'mother_id', 'father_id', 'breed'); 
+    .select('id', 'mother_id', 'father_id', 'breed');
 
   for (const child of children) {
     const parentIds = [child.mother_id, child.father_id].filter(Boolean);
@@ -55,16 +54,15 @@ async function updateDescendantBreeds(horseId) {
     const motherBreed = parents.find(p => p.id === child.mother_id)?.breed || null;
     const fatherBreed = parents.find(p => p.id === child.father_id)?.breed || null;
 
-    let newBreed = child.breed;  
+    let newBreed = child.breed;
 
     if (child.mother_id && child.father_id) {
       newBreed = calculateBreed(motherBreed, fatherBreed);
-    } 
-    else if (child.mother_id || child.father_id)
-       {
+    }
+    else if (child.mother_id || child.father_id) {
       const allowedBreeds = getPossibleBreeds(motherBreed, fatherBreed);
       if (!allowedBreeds.includes(child.breed)) {
-        newBreed = allowedBreeds[0] || 'xo';  
+        newBreed = allowedBreeds[0] || 'xo';
       }
     }
 
